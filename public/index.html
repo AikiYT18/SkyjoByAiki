@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎴 Skyjo By Aiki</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+    * { font-family: 'Poppins', sans-serif; }
+    body { margin: 0; overflow-x: hidden; }
+    @keyframes stars { 0% { transform: translateY(0); } 100% { transform: translateY(-2000px); } }
+    .starfield { position: fixed; width: 100%; height: 100%; z-index: 0; }
+    .star { position: absolute; width: 2px; height: 2px; background: white; border-radius: 50%; animation: stars linear infinite; }
+    @keyframes gradientMove { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+    .animated-gradient { background: linear-gradient(-45deg, #1e3a8a, #3b82f6, #8b5cf6, #ec4899); background-size: 400% 400%; animation: gradientMove 15s ease infinite; }
+    .card-game { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: linear-gradient(145deg, #ffffff, #f0f0f0) !important; box-shadow: 5px 5px 15px rgba(0,0,0,0.2), -5px -5px 15px rgba(255,255,255,0.7); position: relative; overflow: hidden; }
+    .card-game::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent); transform: rotate(45deg); }
+    .card-game:hover:not(:disabled) { transform: translateY(-10px) scale(1.05); box-shadow: 0 15px 30px rgba(0,0,0,0.3); }
+    .card-game:active:not(:disabled) { transform: translateY(-5px) scale(1.02); }
+
+    /* 🔥 Cartes avec dégradés forcés */
+    .card-positive { background: linear-gradient(135deg, #10b981 0%, #047857 100%) !important; color: white !important; text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important; }
+    .card-negative { background: linear-gradient(135deg, #f97316 0%, #b45309 100%) !important; color: white !important; text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important; }
+    .card-hidden { background: linear-gradient(135deg, #8b5cf6 0%, #4c1d95 100%) !important; color: white !important; text-shadow: 2px 2px 4px rgba(0,0,0,0.3) !important; }
+    .card-empty { background: linear-gradient(145deg, #f3f4f6, #e5e7eb) !important; opacity: 0.5 !important; }
+
+    /* 🎈 Animations et styles bonus */
+    @keyframes float { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-20px); } }
+    .float { animation: float 3s ease-in-out infinite; }
+    @keyframes pulse-glow { 0%,100%{box-shadow:0 0 20px rgba(251,191,36,0.5),0 0 40px rgba(251,191,36,0.3);}50%{box-shadow:0 0 30px rgba(251,191,36,0.8),0 0 60px rgba(251,191,36,0.5);} }
+    .glow-pulse { animation: pulse-glow 2s ease-in-out infinite; }
+    @keyframes shimmer { 0%{background-position:-200% center;}100%{background-position:200% center;} }
+    .shimmer { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent); background-size:200% 100%; animation:shimmer 2s infinite; }
+    .glass-panel { background: rgba(255,255,255,0.9); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.5); box-shadow: 0 8px 32px rgba(0,0,0,0.1); }
+    @keyframes slideInUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    .slide-up { animation: slideInUp 0.5s ease-out; }
+    @keyframes bounce { 0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);} }
+    .bounce { animation:bounce 1s ease-in-out infinite; }
+    .trophy-gold { filter: drop-shadow(0 0 15px gold); }
+    @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .rotate-slow { animation: rotate 20s linear infinite; }
+    .card-pattern { background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,.05) 10px, rgba(255,255,255,.05) 20px); }
+    .neon-text { text-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #fff, 0 0 40px #0ff, 0 0 70px #0ff, 0 0 80px #0ff; }
+    </style>
+
+</head>
+<body>
+    <div class="starfield" id="starfield"></div>
+    <div id="app"></div>
+    <script>
+        const starfield = document.getElementById('starfield');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            star.style.animationDelay = Math.random() * 3 + 's';
+            starfield.appendChild(star);
+        }
+        const socket = io();
+        let gameState = null, playerId = null, playerName = '', joined = false, selectedCard = null, message = '', actionMode = 'replace';
+        socket.on('gameState', (state) => { gameState = state; render(); });
+        socket.on('playerId', (id) => { playerId = id; joined = true; render(); });
+        socket.on('drawnCard', (card) => { selectedCard = card; actionMode = 'replace'; render(); });
+        socket.on('error', (msg) => { message = msg; setTimeout(() => { message = ''; render(); }, 3000); render(); });
+        function createGame() { socket.emit('createGame'); }
+        function joinGame() { const input = document.getElementById('playerNameInput'); if (input && input.value.trim()) { playerName = input.value.trim(); socket.emit('joinGame', playerName); } else { message = 'Entre ton nom !'; render(); } }
+        function startGame() { socket.emit('startGame'); }
+        function revealInitialCard(cardIndex) { socket.emit('revealInitialCard', cardIndex); }
+        function drawCard(fromDiscard) { socket.emit('drawCard', fromDiscard); }
+        function replaceCard(cardIndex) { if (selectedCard === null && selectedCard !== 0) return; socket.emit('replaceCard', { cardIndex, drawnCard: selectedCard }); selectedCard = null; actionMode = 'replace'; }
+        function discardDrawnCard(cardIndex) { if (selectedCard === null && selectedCard !== 0) return; socket.emit('discardDrawnCard', { cardIndex, drawnCard: selectedCard }); selectedCard = null; actionMode = 'replace'; }
+        function resetGame() { socket.emit('resetGame'); playerId = null; joined = false; selectedCard = null; message = ''; actionMode = 'replace'; }
+        function calculateScore(player) { return player.grid.reduce((sum, card) => { if (card.value !== null) return sum + card.value; return sum; }, 0); }
+        function setActionMode(mode) { actionMode = mode; render(); }
+        function handleCardClick(cardIndex) { if (!gameState || selectedCard === null && selectedCard !== 0) return; const currentPlayer = gameState.players.find(p => p.id === playerId); if (!currentPlayer) return; const card = currentPlayer.grid[cardIndex]; if (card.value === null) return; if (actionMode === 'replace') { replaceCard(cardIndex); } else { if (!card.revealed) { discardDrawnCard(cardIndex); } } }
+        function render() {
+            const app = document.getElementById('app');
+            if (!gameState) {
+                app.innerHTML = `<div class="min-h-screen animated-gradient flex items-center justify-center p-4 relative z-10"><div class="glass-panel rounded-3xl shadow-2xl p-12 max-w-md w-full slide-up"><div class="text-center mb-8"><div class="text-8xl mb-6 float">🎴</div><h1 class="text-6xl font-black mb-3 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">SKYJO</h1><p class="text-gray-600 text-xl font-semibold">Jeu de cartes multijoueur</p></div><p class="text-gray-600 text-center mb-8 text-lg">Aucune partie en cours</p><button onclick="createGame()" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-2xl font-bold text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300">✨ Créer une nouvelle partie</button></div></div>`;
+                return;
+            }
+            if (!joined) {
+                app.innerHTML = `<div class="min-h-screen animated-gradient flex items-center justify-center p-4 relative z-10"><div class="glass-panel rounded-3xl shadow-2xl p-10 max-w-md w-full slide-up"><div class="text-center mb-8"><div class="text-6xl mb-4 bounce">🎮</div><h1 class="text-5xl font-black mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">SKYJO</h1></div><div class="mb-8"><h2 class="font-bold text-xl mb-4 text-gray-800 flex items-center gap-2"><span class="text-2xl">👥</span> Joueurs connectés</h2><div class="space-y-3">${gameState.players.map((p, i) => `<div class="bg-gradient-to-r from-blue-100 to-purple-100 p-4 rounded-2xl flex items-center gap-3 slide-up shadow-md" style="animation-delay: ${i * 0.1}s"><span class="text-3xl">🎯</span><span class="font-bold text-gray-800 text-lg">${p.name}</span></div>`).join('')}${gameState.players.length === 0 ? '<p class="text-gray-500 text-center italic text-lg">En attente de joueurs...</p>' : ''}</div></div>${!gameState.started ? `<input type="text" id="playerNameInput" placeholder="Entre ton pseudo" maxlength="15" class="w-full p-4 border-3 border-purple-300 rounded-2xl mb-4 text-lg font-semibold focus:outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-200 transition-all"><button onclick="joinGame()" class="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 rounded-2xl font-bold text-xl mb-3 shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300">🚀 Rejoindre la partie</button>${gameState.players.length >= 2 ? `<button onclick="startGame()" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-4 rounded-2xl font-bold text-xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300 glow-pulse">▶️ DÉMARRER !</button>` : '<p class="text-center text-sm text-gray-600 mt-3 font-semibold">⏳ Il faut au moins 2 joueurs</p>'}` : '<p class="text-center text-gray-700 font-bold text-lg">⚡ La partie a déjà commencé</p>'}${message ? `<div class="mt-4 bg-red-100 border-3 border-red-400 rounded-2xl p-4"><p class="text-center text-red-700 font-bold text-lg">${message}</p></div>` : ''}</div></div>`;
+                return;
+            }
+            const currentPlayer = gameState.players.find(p => p.id === playerId);
+            if (!currentPlayer) { app.innerHTML = '<div class="min-h-screen bg-red-600 flex items-center justify-center text-white text-3xl font-bold">❌ Erreur: Joueur non trouvé</div>'; return; }
+            if (gameState.phase === 'initial') {
+                const revealedCount = currentPlayer.grid.filter(c => c.revealed).length;
+                app.innerHTML = `<div class="min-h-screen animated-gradient p-4 relative z-10"><div class="max-w-5xl mx-auto"><div class="text-center mb-8 slide-up"><h1 class="text-6xl font-black text-white mb-4 drop-shadow-lg neon-text">🎴 SKYJO 🎴</h1><div class="glass-panel inline-block px-8 py-4 rounded-3xl"><p class="text-2xl font-black text-gray-800">Retourne 2 cartes pour commencer</p><p class="text-5xl font-black text-purple-600 mt-2">${revealedCount}/2</p></div></div><div class="glass-panel rounded-3xl shadow-2xl p-8 slide-up"><h2 class="font-black text-3xl mb-6 text-gray-800 flex items-center gap-3"><span class="text-4xl">✨</span> Ta grille</h2><div class="grid grid-cols-4 gap-4 max-w-2xl mx-auto">${currentPlayer.grid.map((card, i) => `<button onclick="revealInitialCard(${i})" ${card.revealed ? 'disabled' : ''} class="card-game card-pattern aspect-square rounded-2xl font-black text-4xl ${card.revealed ? card.value >= 0 ? 'card-positive' : 'card-negative' : 'card-hidden shimmer cursor-pointer'}">${card.revealed ? card.value : '?'}</button>`).join('')}</div></div></div></div>`;
+                return;
+            }
+            if (gameState.phase === 'finished') {
+                const scores = gameState.players.map(p => ({ name: p.name, score: calculateScore(p) })).sort((a, b) => a.score - b.score);
+                app.innerHTML = `<div class="min-h-screen animated-gradient flex items-center justify-center p-4 relative z-10"><div class="glass-panel rounded-3xl shadow-2xl p-12 max-w-2xl w-full slide-up"><div class="text-center mb-10"><div class="text-9xl mb-6 trophy-gold rotate-slow">🏆</div><h1 class="text-6xl font-black mb-3 bg-gradient-to-r from-yellow-400 via-yellow-500 to-orange-500 bg-clip-text text-transparent">VICTOIRE !</h1><p class="text-gray-700 text-2xl font-bold">Classement final</p></div><div class="space-y-4 mb-8">${scores.map((s, i) => `<div class="p-6 rounded-2xl transform hover:scale-105 transition-all slide-up ${i === 0 ? 'bg-gradient-to-r from-yellow-200 via-yellow-300 to-yellow-400 border-4 border-yellow-500 glow-pulse' : i === 1 ? 'bg-gradient-to-r from-gray-200 via-gray-300 to-gray-400 border-3 border-gray-500' : i === 2 ? 'bg-gradient-to-r from-orange-200 via-orange-300 to-orange-400 border-3 border-orange-500' : 'bg-gradient-to-r from-blue-100 to-purple-100 border-2 border-blue-300'}" style="animation-delay: ${i * 0.15}s"><div class="flex justify-between items-center"><div class="flex items-center gap-4"><span class="text-5xl font-black">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`}</span><span class="font-black text-2xl text-gray-800">${s.name}</span></div><span class="text-4xl font-black ${i === 0 ? 'text-yellow-700' : 'text-gray-800'}">${s.score}</span></div></div>`).join('')}</div><button onclick="resetGame()" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-5 rounded-2xl font-black text-2xl shadow-lg hover:shadow-2xl transform hover:scale-105 transition-all duration-300">🔄 Nouvelle partie</button></div></div>`;
+                return;
+            }
+            const isMyTurn = gameState.players[gameState.currentPlayer]?.id === playerId;
+            const activePlayer = gameState.players[gameState.currentPlayer];
+            app.innerHTML = `<div class="min-h-screen animated-gradient p-4 relative z-10"><div class="max-w-7xl mx-auto"><h1 class="text-6xl font-black text-center mb-6 text-white drop-shadow-lg slide-up ">🎴 SKYJO BY AIKI 🎴</h1><div class="glass-panel rounded-3xl shadow-xl p-6 mb-6 slide-up"><div class="flex justify-between items-center flex-wrap gap-4"><div><p class="text-sm text-gray-600 mb-1 font-semibold">Tour actuel</p><p class="font-black text-3xl text-gray-800 mb-2">${activePlayer?.name}</p><p class="text-xl font-bold ${isMyTurn ? 'text-green-600 bounce' : 'text-gray-500'}">${isMyTurn ? "✨ C'est ton tour !" : "⏳ Attends ton tour..."}</p></div><div class="text-center bg-gradient-to-br from-blue-100 to-purple-100 p-6 rounded-2xl"><p class="text-5xl font-black text-purple-600">${gameState.deck.length}</p><p class="text-sm text-gray-700 font-bold">cartes restantes</p></div></div></div>${gameState.lastRoundTriggered ? `<div class="bg-gradient-to-r from-red-500 to-pink-500 border-4 border-red-700 rounded-3xl p-6 mb-6 glow-pulse slide-up"><p class="font-black text-center text-4xl text-white drop-shadow-lg">🚨 DERNIER TOUR ! 🚨</p><p class="text-center text-white font-bold text-xl mt-3">${gameState.players.find(p => p.id === gameState.lastRoundTriggeredBy)?.name} a retourné toutes ses cartes !</p></div>` : ''}${isMyTurn && !gameState.turnAction ? `<div class="bg-gradient-to-r from-yellow-200 via-yellow-300 to-orange-300 border-4 border-yellow-500 rounded-3xl p-6 mb-6 glow-pulse slide-up"><p class="font-black text-center mb-6 text-3xl text-gray-800">⚡ Choisis une action</p><div class="flex gap-4 justify-center flex-wrap"><button onclick="drawCard(false)" class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-10 py-5 rounded-2xl font-black text-xl shadow-lg hover:shadow-2xl transform hover:scale-110 transition-all duration-300">🎲 Piocher</button>${gameState.discard.length > 0 ? `<button onclick="drawCard(true)" class="bg-gradient-to-r from-green-600 to-emerald-700 text-white px-10 py-5 rounded-2xl font-black text-xl shadow-lg hover:shadow-2xl transform hover:scale-110 transition-all duration-300">♻️ Défausse (${gameState.discard[gameState.discard.length - 1]})</button>` : ''}</div></div>` : ''}${selectedCard !== null && selectedCard !== undefined ? `<div class="bg-gradient-to-r from-purple-200 via-pink-200 to-purple-300 border-4 border-purple-500 rounded-3xl p-6 mb-6 slide-up"><p class="font-black text-center mb-4 text-3xl text-gray-800">💎 Carte piochée : <span class="text-6xl ml-3 inline-block bounce">${selectedCard}</span></p>${gameState.turnAction === 'drew_from_deck' ? `<div class="bg-white rounded-2xl p-5 mb-4 shadow-lg"><p class="text-center text-gray-800 font-bold text-xl mb-4">Choisis ton action :</p><div class="flex gap-4 justify-center"><button onclick="setActionMode('replace')" class="px-8 py-4 rounded-2xl font-black text-lg shadow-lg transform hover:scale-110 transition-all ${actionMode === 'replace' ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">🔄 Remplacer</button><button onclick="setActionMode('discard')" class="px-8 py-4 rounded-2xl font-black text-lg shadow-lg transform hover:scale-110 transition-all ${actionMode === 'discard' ? 'bg-gradient-to-r from-orange-600 to-orange-700 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}">♻️ Défausser</button></div></div><p class="text-center text-gray-800 font-bold text-lg">${actionMode === 'replace' ? '👉 Clique sur n\'importe quelle carte pour la remplacer' : '👉 Clique sur une carte cachée pour la retourner'}</p>` : `<p class="text-center text-gray-800 font-bold text-xl">👉 Clique sur n'importe quelle carte pour la remplacer</p>`}</div>` : ''}<div class="glass-panel rounded-3xl shadow-2xl p-8 mb-6 slide-up"><div class="flex justify-between items-center mb-6"><h2 class="font-black text-4xl text-gray-800 flex items-center gap-3"><span class="text-5xl">🎯</span> ${currentPlayer.name}</h2><div class="text-center bg-gradient-to-br from-indigo-100 to-purple-200 p-6 rounded-2xl"><p class="text-sm text-gray-700 font-bold">Score</p><p class="text-6xl font-black text-purple-600 drop-shadow-lg">${calculateScore(currentPlayer)}</p></div></div><div class="grid grid-cols-4 gap-5 max-w-3xl mx-auto">${currentPlayer.grid.map((card, i) => { let isClickable = false; if (isMyTurn && (selectedCard !== null && selectedCard !== undefined) && card.value !== null) { if (actionMode === 'replace') { isClickable = true; } else if (actionMode === 'discard' && !card.revealed) { isClickable = true; } } return `<button onclick="handleCardClick(${i})" ${!isClickable ? 'disabled' : ''} class="card-game card-pattern aspect-square rounded-2xl font-black text-5xl ${card.value === null ? 'card-empty' : card.revealed ? card.value >= 0 ? 'card-positive' : 'card-negative' : isClickable ? 'card-hidden shimmer cursor-pointer' : 'card-hidden opacity-70'}">${card.value === null ? '💨' : card.revealed ? card.value : '?'}</button>`}).join('')}</div></div><div class="glass-panel rounded-3xl shadow-xl p-6 slide-up"><h2 class="font-black text-3xl mb-6 text-gray-800 flex items-center gap-3"><span class="text-4xl">👥</span> Autres joueurs</h2><div class="grid md:grid-cols-2 gap-6">${gameState.players.filter(p => p.id !== playerId).map(player => `<div class="border-4 rounded-2xl p-6 transition-all transform hover:scale-105 ${gameState.players[gameState.currentPlayer]?.id === player.id ? 'border-yellow-400 bg-gradient-to-br from-yellow-100 to-orange-100 glow-pulse' : 'border-gray-300 bg-white'}"><div class="flex justify-between items-center mb-4"><span class="font-black text-2xl text-gray-800">${gameState.players[gameState.currentPlayer]?.id === player.id ? '⭐ ' : ''}${player.name}</span><span class="text-3xl font-black text-purple-600">${calculateScore(player)} pts</span></div><div class="grid grid-cols-4 gap-2">${player.grid.map(card => `<div class="card-game card-pattern aspect-square rounded-xl text-lg flex items-center justify-center font-black ${card.value === null ? 'card-empty' : card.revealed ? card.value >= 0 ? 'card-positive' : 'card-negative' : 'card-hidden'}">${card.value === null ? '💨' : card.revealed ? card.value : '?'}</div>`).join('')}</div></div>`).join('')}</div></div>${message ? `<div class="bg-gradient-to-r from-red-500 to-red-600 border-4 border-red-700 rounded-3xl p-5 mt-6 slide-up"><p class="text-center text-white font-black text-2xl">⚠️ ${message}</p></div>` : ''}</div></div>`;
+        }
+        render();
+    </script>
+</body>
+</html>
