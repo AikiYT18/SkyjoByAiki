@@ -44,6 +44,24 @@ function calculateScore(player) {
   }, 0);
 }
 
+// 🔄 Fonction pour recycler la défausse quand la pioche est vide
+function recycleDeck() {
+  if (!gameState || gameState.deck.length > 0 || gameState.discard.length <= 1) {
+    return;
+  }
+  
+  // Garder la dernière carte de la défausse visible
+  const topCard = gameState.discard.pop();
+  
+  // Mélanger le reste de la défausse pour en faire la nouvelle pioche
+  gameState.deck = gameState.discard.sort(() => Math.random() - 0.5);
+  
+  // Réinitialiser la défausse avec juste la carte du dessus
+  gameState.discard = [topCard];
+  
+  console.log('♻️ Défausse recyclée en pioche !', gameState.deck.length, 'cartes');
+}
+
 io.on('connection', (socket) => {
   console.log('Nouveau joueur connecté:', socket.id);
 
@@ -133,6 +151,17 @@ io.on('connection', (socket) => {
       drawnCard = gameState.discard.pop();
       gameState.turnAction = 'drew_from_discard';
     } else {
+      // 🔄 Si la pioche est vide, recycler la défausse
+      if (gameState.deck.length === 0) {
+        recycleDeck();
+      }
+      
+      // Si après recyclage il n'y a toujours rien, on ne peut pas piocher
+      if (gameState.deck.length === 0) {
+        socket.emit('error', 'Impossible de piocher, pas assez de cartes');
+        return;
+      }
+      
       drawnCard = gameState.deck.pop();
       gameState.turnAction = 'drew_from_deck';
     }
@@ -150,33 +179,27 @@ io.on('connection', (socket) => {
     const player = gameState.players[playerIndex];
     const oldCard = player.grid[cardIndex].value;
     
-    // Remplacer la carte (peu importe si elle est révélée ou cachée)
     player.grid[cardIndex] = { value: drawnCard, revealed: true };
 
     checkColumns(player);
 
     gameState.discard.push(oldCard);
 
-    // Vérifier si toutes les cartes sont révélées
     const allRevealed = player.grid.every(c => c.revealed || c.value === null);
     
     if (allRevealed && !gameState.lastRoundTriggered) {
-      // Déclencher le dernier tour
       gameState.lastRoundTriggered = true;
       gameState.lastRoundTriggeredBy = socket.id;
       player.hasPlayedLastRound = true;
     }
 
-    // Marquer que ce joueur a joué son dernier tour si applicable
     if (gameState.lastRoundTriggered) {
       player.hasPlayedLastRound = true;
     }
 
-    // Passer au joueur suivant
     gameState.currentPlayer = (gameState.currentPlayer + 1) % gameState.players.length;
     gameState.turnAction = null;
 
-    // Vérifier si tous les joueurs ont joué leur dernier tour
     if (gameState.lastRoundTriggered && gameState.players.every(p => p.hasPlayedLastRound)) {
       gameState.phase = 'finished';
     }
@@ -193,14 +216,12 @@ io.on('connection', (socket) => {
 
     const player = gameState.players[playerIndex];
     
-    // Retourner une carte cachée
     player.grid[cardIndex].revealed = true;
 
     checkColumns(player);
 
     gameState.discard.push(drawnCard);
 
-    // Vérifier si toutes les cartes sont révélées
     const allRevealed = player.grid.every(c => c.revealed || c.value === null);
     
     if (allRevealed && !gameState.lastRoundTriggered) {
